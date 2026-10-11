@@ -1,6 +1,10 @@
 using System.Text.Json.Serialization;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Resto.Api.Common;
 using Resto.Api.Data;
+using Resto.Api.Services;
+using Resto.Api.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +21,28 @@ builder.Services.AddDbContext<RestoDbContext>(options =>
     options.UseOracle(connectionString));
 
 // ---------------------------------------------------------------
+// Settings (appsettings.json -> "Pricing"), checked at startup
+// ---------------------------------------------------------------
+builder.Services
+    .AddOptions<PricingOptions>()
+    .Bind(builder.Configuration.GetSection(PricingOptions.SectionName))
+    .Validate(o => o.TaxRate is >= 0 and < 1, "Pricing:TaxRate must be between 0 and 1 (e.g. 0.06 for 6%).")
+    .ValidateOnStart();
+
+// ---------------------------------------------------------------
+// Application services (business logic)
+// ---------------------------------------------------------------
+builder.Services.AddScoped<OrderNumberGenerator>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderRequestValidator>();
+
+// ---------------------------------------------------------------
+// Error handling: every error becomes a clean JSON "ProblemDetails" response
+// ---------------------------------------------------------------
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// ---------------------------------------------------------------
 // API
 // Enums are sent as text ("Pending") instead of numbers (0).
 // ---------------------------------------------------------------
@@ -26,7 +52,7 @@ builder.Services
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(o => o.SupportNonNullableReferenceTypes());
 
 // Health check: /health returns "Healthy" when Oracle is reachable
 builder.Services
@@ -34,6 +60,8 @@ builder.Services
     .AddDbContextCheck<RestoDbContext>("oracle");
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

@@ -5,6 +5,7 @@ services:
     container_name: oe-oracle
     environment:
       ORACLE_PWD: ${ORACLE_PWD}
+      TZ: Asia/Kuala_Lumpur
     ports:
       - "${ORACLE_PORT}:1521"
     volumes:

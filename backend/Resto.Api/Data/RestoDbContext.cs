@@ -94,7 +94,7 @@ public class RestoDbContext(DbContextOptions<RestoDbContext> options) : DbContex
     /// <summary>
     /// Rules applied to every property so we don't repeat them per column:
     /// 1. Column names: PascalCase -> UPPER_SNAKE (CategoryId -> CATEGORY_ID)
-    /// 2. bool -> NUMBER(1) holding 0 or 1
+    /// 2. bool -> NUMBER(1) holding 0 or 1 (handled by the Oracle provider)
     /// 3. enum -> UPPER_SNAKE text ('PENDING', 'DINE_IN', ...)
     /// </summary>
     private static void ApplyOracleConventions(ModelBuilder b)
@@ -109,7 +109,9 @@ public class RestoDbContext(DbContextOptions<RestoDbContext> options) : DbContex
 
                 if (type == typeof(bool))
                 {
-                    prop.SetValueConverter(new BoolToZeroOneConverter<int>());
+                    // Oracle's EF provider already maps bool <-> NUMBER(1) (0/1) by itself.
+                    // We only tell it the column type; adding our own converter breaks
+                    // SQL generation for filters like .Where(x => x.IsActive).
                     prop.SetColumnType("NUMBER(1)");
                 }
                 else if (type.IsEnum)

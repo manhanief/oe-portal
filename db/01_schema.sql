@@ -69,7 +69,6 @@ CREATE TABLE orders (
   total          NUMBER(10, 2)  NOT NULL,
   created_at     TIMESTAMP      DEFAULT SYSTIMESTAMP NOT NULL,
   CONSTRAINT pk_orders          PRIMARY KEY (order_id),
-  CONSTRAINT uq_orders_no       UNIQUE (order_no),
   CONSTRAINT fk_orders_table    FOREIGN KEY (table_id) REFERENCES restaurant_tables (table_id),
   CONSTRAINT ck_orders_type     CHECK (order_type IN ('DINE_IN', 'TAKEAWAY')),
   CONSTRAINT ck_orders_status   CHECK (status IN ('PENDING', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED')),
@@ -115,6 +114,10 @@ CREATE TABLE users (
 -- Indexes on foreign keys and common filters
 -- (Oracle does not index foreign key columns automatically)
 -- ---------------------------------------------------------------
+-- Order numbers (A001, A002, ...) restart every day,
+-- so they only need to be unique within the same day.
+CREATE UNIQUE INDEX uq_orders_no_day ON orders (order_no, TRUNC(created_at));
+
 CREATE INDEX ix_menu_items_category  ON menu_items (category_id);
 CREATE INDEX ix_orders_table         ON orders (table_id);
 CREATE INDEX ix_orders_status_date   ON orders (status, created_at);

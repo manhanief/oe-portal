@@ -32,9 +32,11 @@ VALUES ((SELECT category_id FROM categories WHERE name = 'Noodles'),
 INSERT INTO menu_items (category_id, name, description, price)
 VALUES ((SELECT category_id FROM categories WHERE name = 'Noodles'),
         'Char Kuey Teow', 'Wok-fried flat rice noodles with prawns and bean sprouts', 11.50);
+-- Laksa is unavailable, for testing
+-- (SQL*Plus rule: never put a comment after the ; on the same line)
 INSERT INTO menu_items (category_id, name, description, price, is_available)
 VALUES ((SELECT category_id FROM categories WHERE name = 'Noodles'),
-        'Laksa', 'Spicy coconut curry noodle soup', 12.00, 0);  -- unavailable, for testing
+        'Laksa', 'Spicy coconut curry noodle soup', 12.00, 0);
 
 INSERT INTO menu_items (category_id, name, description, price)
 VALUES ((SELECT category_id FROM categories WHERE name = 'Snacks'),

@@ -1,0 +1,122 @@
+/* ------------------------------------------------------------------
+   Design tokens: one place to change the look of the whole site
+   Inspired by kopitiam interiors: pandan-green tiles, white walls,
+   and a kaya-yellow queue ticket.
+------------------------------------------------------------------- */
+:root {
+  --ink: #17241d;
+  --muted: #56665c;
+  --pandan: #1f6b47;
+  --pandan-deep: #164c33;
+  --pandan-wash: #e4f0e8;
+  --tile: #f2f6f2;
+  --paper: #ffffff;
+  --line: #d6e1d9;
+  --kaya: #f2c14e;
+  --kaya-deep: #6b4e00;
+  --chilli: #b42318;
+
+  --font-display: 'Bricolage Grotesque Variable', 'Avenir Next', system-ui, sans-serif;
+  --font-body: 'Figtree Variable', 'Avenir Next', system-ui, sans-serif;
+
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --gutter: 16px;
+  --page-max: 1120px;
+  --header-h: 64px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--tile);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--pandan);
+}
+
+:focus-visible {
+  outline: 3px solid var(--kaya);
+  outline-offset: 2px;
+}
+
+/* PrimeVue components should use our fonts */
+.p-component,
+.p-inputtext,
+.p-button {
+  font-family: inherit;
+}
+
+/* ------------------------------------------------------------------
+   Layout helpers
+------------------------------------------------------------------- */
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 24px var(--gutter) 120px;
+}
+
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 20px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.price {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
