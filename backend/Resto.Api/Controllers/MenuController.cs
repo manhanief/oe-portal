@@ -16,10 +16,16 @@ public class MenuController(RestoDbContext db) : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<MenuCategoryDto>>> Get(CancellationToken ct)
     {
-        var menu = await db.Categories
+        // The menu is small (a few categories, a few dozen items), so we load it
+        // in one simple query and do the filtering and shaping in C#.
+        var categories = await db.Categories
             .AsNoTracking()
-            .Where(c => c.IsActive)
+            .Include(c => c.MenuItems)
             .OrderBy(c => c.SortOrder)
+            .ToListAsync(ct);
+
+        var menu = categories
+            .Where(c => c.IsActive)
             .Select(c => new MenuCategoryDto(
                 c.CategoryId,
                 c.Name,
@@ -33,7 +39,7 @@ public class MenuController(RestoDbContext db) : ControllerBase
                         i.ImageUrl,
                         i.IsAvailable))
                     .ToList()))
-            .ToListAsync(ct);
+            .ToList();
 
         return Ok(menu);
     }

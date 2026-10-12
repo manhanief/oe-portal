@@ -1,8 +1,13 @@
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Resto.Api.Auth;
 using Resto.Api.Common;
 using Resto.Api.Data;
+using Resto.Api.Entities;
 using Resto.Api.Services;
 using Resto.Api.Validators;
 
@@ -21,7 +26,7 @@ builder.Services.AddDbContext<RestoDbContext>(options =>
     options.UseOracle(connectionString));
 
 // ---------------------------------------------------------------
-// Settings (appsettings.json -> "Pricing"), checked at startup
+// Settings, checked at startup
 // ---------------------------------------------------------------
 builder.Services
     .AddOptions<PricingOptions>()
@@ -29,8 +34,55 @@ builder.Services
     .Validate(o => o.TaxRate is >= 0 and < 1, "Pricing:TaxRate must be between 0 and 1 (e.g. 0.06 for 6%).")
     .ValidateOnStart();
 
+builder.Services
+    .AddOptions<SeedAdminOptions>()
+    .Bind(builder.Configuration.GetSection(SeedAdminOptions.SectionName));
+
 // ---------------------------------------------------------------
-// Application services (business logic)
+// Login: secure cookie (HttpOnly, SameSite=Strict)
+// ---------------------------------------------------------------
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "resto_auth";
+        options.Cookie.HttpOnly = true;                       // JavaScript can't read it
+        options.Cookie.SameSite = SameSiteMode.Strict;        // not sent from other websites (CSRF protection)
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // HTTPS-only when served over HTTPS
+        options.ExpireTimeSpan = TimeSpan.FromHours(12);      // one long shift
+        options.SlidingExpiration = true;
+
+        // This is an API: answer 401/403 instead of redirecting to a login page
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(AuthPolicies.Staff, p => p.RequireRole(nameof(UserRole.Staff), nameof(UserRole.Admin)))
+    .AddPolicy(AuthPolicies.Admin, p => p.RequireRole(nameof(UserRole.Admin)));
+
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+// Slow down password guessing: max 5 login attempts per minute per IP address
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
+});
+
+// ---------------------------------------------------------------
+// Application services (business logic) and validation
 // ---------------------------------------------------------------
 builder.Services.AddScoped<OrderNumberGenerator>();
 builder.Services.AddScoped<IOrderService, OrderService>();
@@ -44,10 +96,11 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // ---------------------------------------------------------------
 // API
-// Enums are sent as text ("Pending") instead of numbers (0).
+// - ValidationFilter runs FluentValidation on every request body automatically
+// - Enums are sent as text ("Pending") instead of numbers (0)
 // ---------------------------------------------------------------
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.Add<ValidationFilter>())
     .AddJsonOptions(o =>
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -69,7 +122,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 app.MapHealthChecks("/health");
+
+// Create the first admin account if there are no users yet
+await AdminSeeder.SeedAsync(app.Services);
 
 app.Run();
