@@ -1,17 +1,66 @@
+# Kopitiam Kita: the whole system with one command
+#   docker compose up -d --build
+# Then open http://localhost:8080 (customers) and http://localhost:8080/staff (staff)
+#
+# Settings and passwords come from the .env file next to this one (see .env.example).
+
 services:
+  # ---------- Oracle database ----------
   oracle-db:
     image: container-registry.oracle.com/database/free:latest
-    platform: linux/arm64
+    platform: linux/arm64          # native Apple Silicon image (remove on Intel/AMD machines)
     container_name: oe-oracle
     environment:
       ORACLE_PWD: ${ORACLE_PWD}
-      TZ: Asia/Kuala_Lumpur
+      TZ: ${TZ:-Asia/Kuala_Lumpur}
     ports:
-      - "${ORACLE_PORT}:1521"
+      - "${ORACLE_PORT:-1522}:1521"  # only so SQL Developer / VS Code can connect from your Mac
     volumes:
       - oe-oradata:/opt/oracle/oradata
-      - ./db/sample-schemas:/opt/sample-schemas:ro
+    restart: unless-stopped
+    # The image has its own healthcheck; other services wait for it to be "healthy"
+
+  # ---------- One-time database setup (exits when done) ----------
+  db-init:
+    image: container-registry.oracle.com/database/free:latest
+    platform: linux/arm64
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    environment:
+      ORACLE_PWD: ${ORACLE_PWD}
+      RESTO_PWD: ${RESTO_PWD}
+    volumes:
+      - ./db:/db:ro
+    entrypoint: ["/bin/bash", "/db/init.sh"]
+    restart: "no"
+
+  # ---------- .NET API (not exposed to your Mac; reached through the web container) ----------
+  api:
+    build: ./backend
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Oracle: "User Id=resto;Password=${RESTO_PWD};Data Source=oracle-db:1521/FREEPDB1"
+      SeedAdmin__Username: ${ADMIN_USERNAME}
+      SeedAdmin__Password: ${ADMIN_PASSWORD}
+      DataProtection__KeysPath: /keys
+      TZ: ${TZ:-Asia/Kuala_Lumpur}
+    volumes:
+      - api-keys:/keys
+    restart: unless-stopped
+
+  # ---------- Website (nginx serves Vue and forwards /api to the API) ----------
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
     restart: unless-stopped
 
 volumes:
-  oe-oradata:
+  oe-oradata:   # the database files (survives rebuilds; `docker compose down -v` deletes it)
+  api-keys:     # login-cookie keys, so staff stay logged in after a restart

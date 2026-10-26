@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Resto.Api.Auth;
@@ -65,11 +67,32 @@ builder.Services
         };
     });
 
+// Keys that encrypt the login cookie. In Docker they are saved to a volume,
+// otherwise every API restart would log all staff out.
+var keysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(keysPath))
+{
+    builder.Services
+        .AddDataProtection()
+        .SetApplicationName("Resto")
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+}
+
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AuthPolicies.Staff, p => p.RequireRole(nameof(UserRole.Staff), nameof(UserRole.Admin)))
     .AddPolicy(AuthPolicies.Admin, p => p.RequireRole(nameof(UserRole.Admin)));
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+// Behind nginx (Docker), use the visitor's real IP address from X-Forwarded-For,
+// so the login rate limit applies per visitor instead of to nginx itself.
+// Safe here because the API is only reachable through nginx on the internal Docker network.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Slow down password guessing: max 5 login attempts per minute per IP address
 builder.Services.AddRateLimiter(options =>
@@ -114,6 +137,7 @@ builder.Services
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
